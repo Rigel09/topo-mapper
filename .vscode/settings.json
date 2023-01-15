@@ -1,5 +1,9 @@
 {
     "editor.formatOnSave": true,
+    "python.linting.lintOnSave": true,
+    "python.linting.enabled": true,
+    "autoDocstring.docstringFormat": "google",
+    "autoDocstring.startOnNewLine": true,
     "python.formatting.provider": "black",
     "python.formatting.blackArgs": [
         "--line-length=100"
