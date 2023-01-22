@@ -1,9 +1,9 @@
 from topo_mapper.waypoint_file_parser import WaypointFileParser as wfp
 from topo_mapper.conversions import lla2mercxya
+from topo_mapper.enums import Feature
 
-from bokeh.driving import count
-from bokeh.layouts import column, gridplot, row
-from bokeh.models import ColumnDataSource, Select, Slider
+from bokeh.layouts import column
+from bokeh.models import ColumnDataSource, HoverTool
 from bokeh.plotting import figure, show
 import numpy as np
 import pandas as pd
@@ -36,7 +36,7 @@ if __name__ == "__main__":
 
     waypoint_files = [Path(x) for x in args.waypoints]
 
-    data = pd.DataFrame(columns=COLUMNS)
+    data = pd.DataFrame(columns=wfp.COL.ALL_COLS)
     for file in waypoint_files:
         if not file.exists():
             raise FileExistsError(f"File [{file}] cannot be found")
@@ -44,23 +44,90 @@ if __name__ == "__main__":
         data = pd.concat(
             [
                 data,
-                pd.read_csv(
-                    file, delimiter=",", header=None, index_col=False, names=COLUMNS, skiprows=1
-                ),
+                wfp(file).df,
             ],
             ignore_index=True,
         )
 
     logger.info("All files loaded")
-
+    source = ColumnDataSource(data)
     print(data)
-    lla = np.ones(data.shape) * 180
-    lla[:, 0] = data["lat"].to_numpy()
-    lla[:, 1] = data["long"].to_numpy()
-    lla = lla2mercxya(lla)
     map = figure(
         title="TOPO Map", x_axis_type="mercator", y_axis_type="mercator", sizing_mode="stretch_both"
     )
     map.add_tile(xyz.USGS.USTopo, retina=True)
-    map.scatter(lla[:, 0], lla[:, 1], line_width=4, color="orange")
+
+    waterfall_source = ColumnDataSource(data[data[wfp.COL.FEATURE_TYPE_STR] == Feature.FALLS.name])
+    parking_source = ColumnDataSource(data[data[wfp.COL.FEATURE_TYPE_STR] == Feature.PARKING.name])
+    trail_junc_source = ColumnDataSource(
+        data[data[wfp.COL.FEATURE_TYPE_STR] == Feature.TRAIL_JUNCTION.name]
+    )
+    trail_head_source = ColumnDataSource(
+        data[data[wfp.COL.FEATURE_TYPE_STR] == Feature.TRAIL_HEAD.name]
+    )
+    uniquq_feature_source = ColumnDataSource(
+        data[data[wfp.COL.FEATURE_TYPE_STR] == Feature.UNIQUE_FEATURE.name]
+    )
+    print(waterfall_source)
+    map.image_url(
+        url=wfp.COL.GLYPH_URL,
+        x=wfp.COL.MERC_X,
+        y=wfp.COL.MERC_Y,
+        w=25,
+        h=25,
+        w_units="screen",
+        h_units="screen",
+        anchor="bottom_left",
+        source=waterfall_source,
+        legend_label="Waterfalls",
+    )
+    map.image_url(
+        url=wfp.COL.GLYPH_URL,
+        x=wfp.COL.MERC_X,
+        y=wfp.COL.MERC_Y,
+        w=15,
+        h=15,
+        w_units="screen",
+        h_units="screen",
+        anchor="bottom_left",
+        source=parking_source,
+        legend_label="Parking",
+    )
+    map.square(
+        x=wfp.COL.MERC_X,
+        y=wfp.COL.MERC_Y,
+        size=9,
+        color="black",
+        legend_label="Trail Junction",
+        source=trail_junc_source,
+    )
+    map.star(
+        x=wfp.COL.MERC_X,
+        y=wfp.COL.MERC_Y,
+        size=18,
+        color="orange",
+        legend_label="Unique Feature",
+        source=uniquq_feature_source,
+    )
+    map.scatter(
+        x=wfp.COL.MERC_X,
+        y=wfp.COL.MERC_Y,
+        color="red",
+        size=10,
+        legend_label="Trailhead",
+        source=trail_head_source,
+    )
+    map.legend.click_policy = "hide"
+    map.add_tools(
+        HoverTool(
+            tooltips=[
+                ("Name", "@" + wfp.COL.NAME),
+                ("LAT", "@" + wfp.COL.LAT),
+                ("LONG", "@" + wfp.COL.LONG),
+                ("ALT", "@" + wfp.COL.ALT),
+                ("Feature Type", "@" + wfp.COL.FEATURE_TYPE_STR),
+                ("DESC", "@" + wfp.COL.DESC),
+            ]
+        )
+    )
     show(column(map, sizing_mode="stretch_both"))
